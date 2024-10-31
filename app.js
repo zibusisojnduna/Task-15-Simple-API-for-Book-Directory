@@ -50,4 +50,30 @@ app.post("/books", authenticate, (req, res) => {
     res.status(201).json(newBook)
 })
 
-app.put("/books/:isbn", authenticate)
+app.put("/books/:isbn", authenticate, (req, res) => {
+    const index = books.findIndex(b => b.ISBN === req.params.isbn)
+    if (index === -1) {
+        return res.status(404).json({error:"Book not found"})
+    }
+    const {title, author, publisher, publishedDate, ISBN} = req.body
+    if (!title || !author) {
+        return res.status(400).json({error:"Title and Author are required"})
+    }
+    books[index] = {...books[index], title, author,publisher, publishedDate}
+    saveBooks()
+    res.json(books[index])
+})
+
+app.delete("/books/:isbn", authenticate, (req, res) => {
+    const index = books.findIndex(b => b.ISBN === req.params.isbn)
+    if (index === -1) {
+        return res.status(404).json({error:"Book not found"})
+    }
+    books.splice(index, 1)
+    saveBooks()
+    res.status(204).end()
+})
+
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`)
+})
