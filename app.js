@@ -1,108 +1,119 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+
+dotenv.config();
+
 const app = express();
 const port = 3000;
 
-// Simulate a book directory database
-let books = [
-  {
-    title: 'The Catcher in the Rye',
-    author: 'J.D. Salinger',
-    publisher: 'Little, Brown and Company',
-    publishedDate: '1951-07-16',
-    ISBN: '9780316769488'
-  },
-  {
-    title: '1984',
-    author: 'George Orwell',
-    publisher: 'Secker & Warburg',
-    publishedDate: '1949-06-08',
-    ISBN: '9780451524935'
-  }
-];
 
-// Middleware to parse JSON bodies
 app.use(bodyParser.json());
 
-// Middleware to check API key
-const API_KEY = 'your-api-key-here';
-const checkApiKey = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey !== API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid API Key' });
-  }
-  next();
-};
 
-// GET: Retrieve all books
-app.get('/books', (req, res) => {
-  res.status(200).json(books);
+function loadBooksData() {
+  const data = fs.readFileSync('./books.json', 'utf8');
+  return JSON.parse(data);
+}
+
+// Save books data to JSON file
+function saveBooksData(books) {
+  fs.writeFileSync('./books.json', JSON.stringify(books, null, 2), 'utf8');
+}
+
+// Authorization middleware to check API key
+function authenticateAPIKey(req, res, next) {
+  const apiKey = req.header('x-api-key');
+  if (apiKey === process.env.API_KEY) {
+    next(); // Proceed to the next middleware or route
+  } else {
+    res.status(403).json({ error: 'Forbidden: Invalid API key' });
+  }
+}
+
+
+app.get('/api/books', authenticateAPIKey, (req, res) => {
+  const books = loadBooksData();
+  if (req.query.isbn) {
+    const book = books.find(b => b.ISBN === req.query.isbn);
+    if (book) {
+      return res.json(book);
+    } else {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+  }
+  res.json(books);
 });
 
-// GET: Retrieve a specific book by ISBN
-app.get('/books/:isbn', (req, res) => {
-  const isbn = req.params.isbn;
-  const book = books.find(b => b.ISBN === isbn);
-  if (!book) {
-    return res.status(404).json({ error: 'Book not found' });
-  }
-  res.status(200).json(book);
-});
 
-// POST: Add a new book to the directory
-app.post('/books', checkApiKey, (req, res) => {
+app.post('/api/books', authenticateAPIKey, (req, res) => {
   const { title, author, publisher, publishedDate, ISBN } = req.body;
 
-  // Validate input data
+  
   if (!title || !author || !publisher || !publishedDate || !ISBN) {
     return res.status(400).json({ error: 'All fields are required' });
   }
+  if (isNaN(ISBN)) {
+    return res.status(400).json({ error: 'ISBN must be a valid number' });
+  }
 
-  if (books.some(b => b.ISBN === ISBN)) {
+  const books = loadBooksData();
+  
+  if (books.find(b => b.ISBN === ISBN)) {
     return res.status(400).json({ error: 'Book with this ISBN already exists' });
   }
 
-  // Add new book
+  
   const newBook = { title, author, publisher, publishedDate, ISBN };
   books.push(newBook);
+  saveBooksData(books);
 
   res.status(201).json(newBook);
 });
 
-// PUT: Update a book’s details by ISBN
-app.put('/books/:isbn', checkApiKey, (req, res) => {
-  const isbn = req.params.isbn;
+
+app.put('/api/books/:isbn', authenticateAPIKey, (req, res) => {
+  const { isbn } = req.params;
   const { title, author, publisher, publishedDate } = req.body;
 
-  const bookIndex = books.findIndex(b => b.ISBN === isbn);
-  if (bookIndex === -1) {
-    return res.status(404).json({ error: 'Book not found' });
-  }
 
-  // Validate data
   if (!title || !author || !publisher || !publishedDate) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  // Update the book
-  books[bookIndex] = { ISBN: isbn, title, author, publisher, publishedDate };
-  res.status(200).json(books[bookIndex]);
-});
-
-// DELETE: Remove a book from the directory by ISBN
-app.delete('/books/:isbn', checkApiKey, (req, res) => {
-  const isbn = req.params.isbn;
+  const books = loadBooksData();
   const bookIndex = books.findIndex(b => b.ISBN === isbn);
+
   if (bookIndex === -1) {
     return res.status(404).json({ error: 'Book not found' });
   }
 
-  // Remove the book
-  books.splice(bookIndex, 1);
-  res.status(200).json({ message: 'Book deleted successfully' });
+  
+  books[bookIndex] = { ...books[bookIndex], title, author, publisher, publishedDate };
+  saveBooksData(books);
+
+  res.json(books[bookIndex]);
 });
 
-// Start the server
+
+app.delete('/api/books/:isbn', authenticateAPIKey, (req, res) => {
+  const { isbn } = req.params;
+  const books = loadBooksData();
+  const bookIndex = books.findIndex(b => b.ISBN === isbn);
+
+  if (bookIndex === -1) {
+    return res.status(404).json({ error: 'Book not found' });
+  }
+
+  
+  const deletedBook = books.splice(bookIndex, 1);
+  saveBooksData(books);
+
+  res.json({ message: 'Book deleted', book: deletedBook[0] });
+});
+
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Server running on http://localhost:${port}`);
 });

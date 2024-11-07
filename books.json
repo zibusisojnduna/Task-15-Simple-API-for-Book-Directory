@@ -1,1 +1,10 @@
-[]
+[
+    {
+        "title": "The Great Gatsby",
+        "author": "F. Scott Fitzgerald",
+        "publisher": "Scribner",
+        "publishedDate": "1925-04-10",
+        "ISBN": "9780743273565"
+    }
+
+]
